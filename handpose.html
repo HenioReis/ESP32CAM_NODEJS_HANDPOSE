@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>ESP32CAM HANDPOSE</title>
+	<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.1.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+</head>
+<body>
+	<div style="position:left;">
+      <img src="" id="stream" style="display: none;">
+      <canvas id="canvas" style="width: 500px; height: 450px;"></canvas>
+      <div id="log" style="font-size: 20px; color: blue;"></div>
+    </div>
+  <script>
+  const stream = document.querySelector('img');
+  const WS_URL = 'ws://10.0.0.6:8888';
+  const ws = new WebSocket(WS_URL);
+  let urlObject;
+
+   ws.onopen = () => console.log(`Connected to ${WS_URL}`);
+   ws.onmessage = message => {
+    const arrayBuffer = message.data;
+     if(urlObject){
+        URL.revokeObjectURL(urlObject);
+      }
+    urlObject = URL.createObjectURL(new Blob([arrayBuffer]));
+    stream.src = urlObject;
+  }
+
+  const viewStream = document.getElementById("stream");
+  const log = document.getElementById("log");
+  const canvas = document.getElementById("canvas");
+  const context = canvas.getContext("2d");
+  var Model;
+  var lastValue = -1;
+
+  let fingerLookupIndices = {
+	thumb:        [0, 1, 2, 3, 4],
+	indexFinger:  [0, 5, 6, 7, 8],
+	middleFinger: [0, 9, 10, 11, 12],
+	ringFinger:   [0, 13, 14, 15, 16],
+	pinky:        [0, 17, 18, 19, 20],
+	line:        [2, 5, 9, 13, 17]
+  };
+
+  async function handpose_detection() {
+  	  canvas.setAttribute("width", viewStream.width);
+      canvas.setAttribute("height", viewStream.height);
+      context.drawImage(viewStream, 0, 0, viewStream.width, viewStream.height);   
+      
+      await Model.estimateHands(canvas).then(predictions => {
+      	var s = (viewStream.width>viewStream.height)?viewStream.width:viewStream.height;
+      	if(predictions.length > 0){
+           for (let i = 0; i < predictions.length; i++) {
+           const keypoints = predictions[i].landmarks;
+           const boundingBox = predictions[i].boundingBox;
+           //Log hand keypoints.
+           //for (let n = 0; n < keypoints.length; n++) {
+           //const [x, y, z] = keypoints[i];
+           //console.log(`Keypoint [${x}, ${y}, ${z}]`);
+           //console.log("Predictions bouBox:"+Keypoints);
+           //}
+           log.innerHTML = "Predictions:"+'x:{'+predictions[i].landmarks[0]+"} y:{"+predictions[i].landmarks[1]+"} z:{"+predictions[i].landmarks[2]+"}";
+         }
+         const res = predictions[0].landmarks;
+        drawKeypoints(context, res, predictions[0].annotations);
+      	}
+      });
+      
+  }
+
+  function drawPoint(ctx, x, y) {
+      ctx.beginPath();
+      ctx.fillStyle = "blue";
+      ctx.lineWidth = 7;
+      ctx.arc(x, y, 11, 0, 2*Math.PI);
+      ctx.arc(x, y, 12, 0, 2*Math.PI);
+      ctx.stroke();
+    }
+    
+    function drawKeypoints(ctx, keypoints) {
+      const keypointsArray = keypoints;
+      for (let i = 0; i < keypointsArray.length; i++) {
+      const x = keypointsArray[i][0];
+      const y = keypointsArray[i][1];
+      drawPoint(ctx, x, y);
+      }
+    
+      const fingers = Object.keys(fingerLookupIndices);
+      for (let i = 0; i < fingers.length; i++) {
+      const finger = fingers[i];
+      const points = fingerLookupIndices[finger].map(idx => keypoints[idx]);
+      drawPath(ctx, points, false);
+      }
+    }
+    
+    function drawPath(ctx, points, closePath) {
+      if (lastValue==-1||lastValue!=points[0][0]) {
+      ctx.strokeStyle = "black";
+      } else {
+      ctx.strokeStyle = "yellow";
+      }
+    
+      const region = new Path2D();
+      region.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) {
+      const point = points[i];
+      region.lineTo(point[0], point[1]);
+      }
+    
+      lastValue=points[0][0];
+    
+      if (closePath) {
+      region.closePath();
+      }
+      ctx.stroke(region);
+    }
+  
+  stream.onload = function (event) {
+     if (Model){
+        handpose_detection();
+      }
+   }
+
+  window.onload = function(){
+	handpose.load().then(function(handpose_model) {
+	Model = handpose_model
+   });
+  }
+  </script>
+
+</body>
+</html>
