@@ -1,3 +1,9 @@
+/*
+Autor: Hênio Reis
+Proj: Server websocket nodejs com handpose e esp32cam
+Data:02/02/2021
+*/
+
 const path = require('path');
 const express = require('express');
 const WebSocket = require('ws');
